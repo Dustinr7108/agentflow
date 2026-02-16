@@ -22,8 +22,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 }))
 
-// API helper
-const API = 'http://localhost:8000'
+// API helper - auto-detect environment
+const API = import.meta.env.PROD
+  ? (import.meta.env.VITE_API_URL || '')  // In production, use same origin or env var
+  : 'http://localhost:8000'
 
 export async function api(path: string, options: RequestInit = {}) {
   const token = useAuthStore.getState().token

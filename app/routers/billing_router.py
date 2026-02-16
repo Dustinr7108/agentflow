@@ -64,8 +64,8 @@ def create_checkout(plan: str, user: User = Depends(get_current_user)):
         payment_method_types=["card"],
         line_items=[{"price": price_id, "quantity": 1}],
         mode="subscription",
-        success_url="http://localhost:3000/billing?success=true",
-        cancel_url="http://localhost:3000/billing?canceled=true",
+        success_url=f"https://awesomeai.life/billing?success=true",
+        cancel_url=f"https://awesomeai.life/billing?canceled=true",
         metadata={"user_id": user.id, "plan": plan},
     )
 
