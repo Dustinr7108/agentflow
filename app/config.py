@@ -7,8 +7,9 @@ class Settings(BaseSettings):
     APP_NAME: str = "AgentFlow"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
+    PORT: int = 8000
 
-    # Database
+    # Database - Railway sets DATABASE_URL automatically when you add PostgreSQL
     DATABASE_URL: str = "postgresql://agentflow:agentflow@localhost:5433/agentflow"
     REDIS_URL: str = "redis://localhost:6379/0"
 
