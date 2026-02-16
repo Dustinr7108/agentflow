@@ -1,4 +1,4 @@
-import { Outlet, Link, useNavigate } from 'react-router-dom'
+import { Outlet, Link, useNavigate, Navigate } from 'react-router-dom'
 import { useAuthStore } from '../store'
 import { Workflow, LayoutTemplate, LogOut, Zap } from 'lucide-react'
 
@@ -7,8 +7,7 @@ export default function Layout() {
   const navigate = useNavigate()
 
   if (!user) {
-    navigate('/login')
-    return null
+    return <Navigate to="/login" replace />
   }
 
   return (
