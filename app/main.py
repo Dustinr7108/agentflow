@@ -8,12 +8,19 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.db import init_db
 from app.seed import seed_builtin_agents
+from app.scheduler import start_scheduler, stop_scheduler
+
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 
 
 @asynccontextmanager
@@ -21,8 +28,10 @@ async def lifespan(app: FastAPI):
     # Startup
     init_db()
     seed_builtin_agents()
+    start_scheduler()
     yield
     # Shutdown
+    stop_scheduler()
 
 
 app = FastAPI(
@@ -31,6 +40,11 @@ app = FastAPI(
     description="Visual AI Agent Orchestration Platform - Design, run, and automate AI workflows",
     lifespan=lifespan,
 )
+
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # CORS for frontend
 app.add_middleware(

@@ -1,7 +1,7 @@
 """Database models for AgentFlow."""
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, Integer, Float, Boolean, DateTime, ForeignKey, JSON
+from sqlalchemy import String, Text, Integer, Float, Boolean, DateTime, ForeignKey, JSON, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 
@@ -55,6 +55,7 @@ class Workflow(Base):
     graph: Mapped[dict] = mapped_column(JSON, default=lambda: {"nodes": [], "edges": []})
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     schedule_cron: Mapped[str | None] = mapped_column(String(100), nullable=True)  # e.g. "0 8 * * *"
+    webhook_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -65,6 +66,10 @@ class Workflow(Base):
 class WorkflowRun(Base):
     """A single execution of a workflow."""
     __tablename__ = "workflow_runs"
+    __table_args__ = (
+        Index("ix_workflow_runs_workflow_id", "workflow_id"),
+        Index("ix_workflow_runs_created_at", "created_at"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     workflow_id: Mapped[str] = mapped_column(String(36), ForeignKey("workflows.id"))
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending, running, completed, failed
@@ -87,6 +92,9 @@ class WorkflowRun(Base):
 class UsageRecord(Base):
     """Track usage for billing."""
     __tablename__ = "usage_records"
+    __table_args__ = (
+        Index("ix_usage_records_user_created", "user_id", "created_at"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
     workflow_run_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("workflow_runs.id"), nullable=True)

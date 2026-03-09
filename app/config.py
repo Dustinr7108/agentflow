@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     PRO_RUNS: int = 1000
     ENTERPRISE_RUNS: int = 10000
 
+    # App URL
+    APP_URL: str = "https://agentflow.app"
+
     # Email
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: int = 587

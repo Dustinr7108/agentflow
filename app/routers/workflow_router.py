@@ -1,7 +1,9 @@
 """Workflow router - CRUD + execution."""
+import secrets
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.db import get_db
 from app.models import User, Workflow, WorkflowRun, AgentDef, UsageRecord
@@ -11,6 +13,7 @@ from app.schemas import (
 )
 from app.auth import get_current_user, check_usage_limit
 from app.workflows.engine import WorkflowEngine
+from app.scheduler import schedule_workflow, unschedule_workflow
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
@@ -58,8 +61,17 @@ def update_workflow(workflow_id: str, data: WorkflowUpdate, user: User = Depends
         wf.graph = data.graph.model_dump()
     if data.schedule_cron is not None:
         wf.schedule_cron = data.schedule_cron
+        # Update scheduler
+        if data.schedule_cron and wf.is_active:
+            schedule_workflow(wf.id, data.schedule_cron)
+        else:
+            unschedule_workflow(wf.id)
     if data.is_active is not None:
         wf.is_active = data.is_active
+        if not data.is_active:
+            unschedule_workflow(wf.id)
+        elif wf.schedule_cron:
+            schedule_workflow(wf.id, wf.schedule_cron)
 
     wf.updated_at = datetime.now(timezone.utc)
     db.commit()
@@ -127,6 +139,78 @@ def run_workflow(workflow_id: str, data: RunWorkflow, user: User = Depends(get_c
     db.commit()
     db.refresh(run)
 
+    return WorkflowRunOut.model_validate(run)
+
+
+@router.post("/{workflow_id}/webhook/enable")
+def enable_webhook(workflow_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Generate a webhook secret for a workflow."""
+    wf = db.query(Workflow).filter(Workflow.id == workflow_id, Workflow.user_id == user.id).first()
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    wf.webhook_secret = secrets.token_hex(32)
+    db.commit()
+    return {"webhook_secret": wf.webhook_secret, "webhook_url": f"/workflows/{workflow_id}/webhook"}
+
+
+@router.post("/{workflow_id}/webhook")
+async def webhook_trigger(
+    workflow_id: str,
+    request: Request,
+    x_webhook_secret: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Trigger a workflow via webhook. Requires X-Webhook-Secret header."""
+    wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    if not wf.webhook_secret:
+        raise HTTPException(status_code=403, detail="Webhook not enabled for this workflow")
+    if not secrets.compare_digest(x_webhook_secret or "", wf.webhook_secret):
+        raise HTTPException(status_code=403, detail="Invalid webhook secret")
+    if not wf.is_active:
+        raise HTTPException(status_code=400, detail="Workflow is not active")
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    agent_def_ids = [n.get("agent_def_id", "") for n in wf.graph.get("nodes", []) if n.get("agent_def_id")]
+    agent_defs_db = db.query(AgentDef).filter(AgentDef.id.in_(agent_def_ids)).all() if agent_def_ids else []
+    agent_defs = {ad.id: {"agent_type": ad.agent_type, "config": ad.config} for ad in agent_defs_db}
+
+    run = WorkflowRun(
+        workflow_id=wf.id,
+        trigger="webhook",
+        input_data=body,
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(run)
+    db.commit()
+
+    engine = WorkflowEngine(graph=wf.graph, agent_defs=agent_defs)
+    result = engine.run(input_data=body)
+
+    run.status = result["status"]
+    run.output_data = result["output_data"]
+    run.node_results = result["node_results"]
+    run.total_tokens = result["total_tokens"]
+    run.total_cost_usd = result["total_cost_usd"]
+    run.duration_ms = result["duration_ms"]
+    run.completed_at = datetime.now(timezone.utc)
+    if result.get("failed_node"):
+        run.error = f"Failed at node: {result['failed_node']}"
+
+    usage = UsageRecord(
+        user_id=wf.user_id,
+        workflow_run_id=run.id,
+        tokens_used=result["total_tokens"],
+        cost_usd=result["total_cost_usd"],
+    )
+    db.add(usage)
+    db.commit()
+    db.refresh(run)
     return WorkflowRunOut.model_validate(run)
 
 

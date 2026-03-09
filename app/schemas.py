@@ -97,6 +97,7 @@ class WorkflowOut(BaseModel):
     graph: dict
     is_active: bool
     schedule_cron: Optional[str]
+    webhook_secret: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

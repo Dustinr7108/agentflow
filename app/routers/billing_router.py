@@ -59,13 +59,14 @@ def create_checkout(plan: str, user: User = Depends(get_current_user)):
     if not price_id:
         raise HTTPException(status_code=400, detail=f"Invalid plan: {plan}")
 
+    app_url = getattr(settings, "APP_URL", "https://agentflow.app")
     session = stripe.checkout.Session.create(
         customer_email=user.email,
         payment_method_types=["card"],
         line_items=[{"price": price_id, "quantity": 1}],
         mode="subscription",
-        success_url=f"https://awesomeai.life/billing?success=true",
-        cancel_url=f"https://awesomeai.life/billing?canceled=true",
+        success_url=f"{app_url}/billing?success=true",
+        cancel_url=f"{app_url}/billing?canceled=true",
         metadata={"user_id": user.id, "plan": plan},
     )
 

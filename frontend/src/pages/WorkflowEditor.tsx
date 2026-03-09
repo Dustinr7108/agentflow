@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import ReactFlow, {
   Controls, Background, MiniMap,
@@ -13,7 +13,7 @@ import AgentNode from '../components/AgentNode'
 import {
   Play, Save, ArrowLeft, Plus, Settings, X,
   Brain, Search, Code, Globe, Shuffle, GitBranch,
-  Loader2, CheckCircle, XCircle
+  Loader2, CheckCircle, XCircle, History
 } from 'lucide-react'
 
 const nodeTypes = { agent: AgentNode }
@@ -192,6 +192,12 @@ export default function WorkflowEditor() {
           >
             <Plus className="w-4 h-4" /> Add Agent
           </button>
+          <Link
+            to={`/workflow/${id}/runs`}
+            className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm"
+          >
+            <History className="w-4 h-4" /> Runs
+          </Link>
           <button
             onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
@@ -463,9 +469,21 @@ export default function WorkflowEditor() {
         )}
       </div>
 
-      {/* Input data bar */}
+      {/* Schedule + input bar */}
       <div className="bg-gray-900 border-t border-gray-800 px-4 py-2 flex items-center gap-4 shrink-0">
-        <span className="text-xs text-gray-400">Input Data (JSON):</span>
+        <span className="text-xs text-gray-400 whitespace-nowrap">Cron:</span>
+        <input
+          value={workflow?.schedule_cron || ''}
+          onChange={(e) => {
+            const val = e.target.value
+            api(`/workflows/${id}`, { method: 'PUT', body: JSON.stringify({ schedule_cron: val || null }) })
+              .catch(() => {})
+          }}
+          className="w-40 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm font-mono focus:outline-none focus:border-blue-500"
+          placeholder="0 8 * * *"
+          title="Cron expression for scheduled runs (e.g. 0 8 * * * = daily at 8am)"
+        />
+        <span className="text-xs text-gray-400 whitespace-nowrap">Input (JSON):</span>
         <input
           value={inputData}
           onChange={(e) => setInputData(e.target.value)}
