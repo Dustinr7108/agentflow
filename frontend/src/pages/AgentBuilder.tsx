@@ -80,7 +80,7 @@ export default function AgentBuilder() {
     else createMutation.mutate(payload)
   }
 
-  const userAgents = (agents || []).filter((a: any) => \!a.is_builtin)
+  const userAgents = (agents || []).filter((a: any) =>!a.is_builtin)
   const builtinAgents = (agents || []).filter((a: any) => a.is_builtin)
   const isPending = createMutation.isPending || updateMutation.isPending
   return (
